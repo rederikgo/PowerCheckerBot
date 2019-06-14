@@ -1,0 +1,11 @@
+telegram:
+    token: ''
+    proxy: ''
+    recipients:
+        - ''
+pinger:
+    ip: ''
+    frequency: 
+    report failure delay: 
+debug:
+    debug level: DEBUG

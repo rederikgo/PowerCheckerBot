@@ -1,0 +1,11 @@
+# Ignore
+__pycache__/
+.idea/
+venv/
+Dockerfile
+*.log
+*.txt
+*.yaml
+
+# Allow
+!requirements.txt
