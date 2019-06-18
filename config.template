@@ -6,6 +6,7 @@ telegram:
 pinger:
     ip: ''
     frequency: 
-    report failure delay: 
+    report failure delay:
+    initial delay:
 debug:
     debug level: DEBUG

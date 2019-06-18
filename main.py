@@ -58,7 +58,12 @@ def main():
     host = cfg['pinger']['ip']
     frequency = cfg['pinger']['frequency']
     report_delay = cfg['pinger']['report failure delay']
+    initial_delay = cfg['pinger']['initial delay']
 
+    # Delay execution, give vpn clients some time to reconnect after server reboot
+    time.sleep(initial_delay)
+
+    # Start regular pinging
     failure_reported = ''
     went_offline = ''
     while 1:
