@@ -57,13 +57,8 @@ class TeleRequester(Requester):
     api_endpoint = 'https://api.telegram.org'
 
     # Construct url string from parameters
-    def _make_url(self, method, params={}):
-
+    def _make_url(self, method):
         url = '/'.join([self.api_endpoint, 'bot' + self.token, method])
-        if params:
-            params = [key + '=' + params[key] for key in params]
-            params = '?' + '&'.join(params)
-            url += params
         return url
 
     # Check and report response status
@@ -85,6 +80,21 @@ class TeleRequester(Requester):
         params = {
             'chat_id': chat_id,
             'text': text
+        }
+        url = self._make_url(method)
+        response = self._get_url(url, params=params)
+        return self._check_response_status(response)
+
+    # Get updates
+    def get_updates(self):
+        url = self._make_url('getUpdates')
+        return self._get_url(url)
+
+    # Clear updates
+    def clear_updates(self, offset):
+        method = 'getUpdates'
+        params = {
+            'offset': offset
         }
         url = self._make_url(method)
         response = self._get_url(url, params=params)

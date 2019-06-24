@@ -2,7 +2,8 @@ telegram:
     token: ''
     proxy: ''
     recipients:
-        - ''
+        - 
+	poll frequency:
 pinger:
     ip: ''
     frequency: 
