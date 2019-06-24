@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import logging.handlers
 import platform
@@ -9,20 +10,54 @@ import yaml
 from rest_wrappers import TeleRequester
 
 
-def ping(host):
-    if platform.system().lower() == 'windows':
-        param = '-n'
-    else:
-        param = '-c'
-    command = ['ping', param, '1', host]
-    return subprocess.call(command) == 0
-
-
 def main():
+    def ping(host):
+        if platform.system().lower() == 'windows':
+            param = '-n'
+        else:
+            param = '-c'
+        command = ['ping', param, '1', host]
+        return subprocess.call(command) == 0
+
     def send(message):
         for recipient in recipients:
             telegram.send_message(recipient, message)
             logger.debug(f'Message {message} sent to {recipient}')
+
+    async def pinger():
+        failure_reported = ''
+        went_offline = ''
+        while True:
+            loop = asyncio.get_event_loop()
+            future = loop.run_in_executor(None, ping, host)
+            response = await future
+            base_time = time.time()
+            if response:
+                is_online = True
+                logger.debug('Server is online')
+                went_offline = ''
+                if failure_reported:
+                    message = 'Соединение с роутером восстановлено'
+                    send(message)
+                    failure_reported = ''
+                    logger.info('Server is online again!')
+            else:
+                is_online = False
+                if not went_offline:
+                    logger.info('Server went offline!')
+                    went_offline = time.time()
+                else:
+                    logger.debug('Server is offline')
+
+            if went_offline and not failure_reported and time.time() > went_offline + report_delay:
+                message = f'{round(report_delay / 60)} минут назад пропало соединение с вашим роутером'
+                send(message)
+                logger.info('Failure reported to telegram recipients')
+                failure_reported = time.time()
+
+            if time.time() < base_time + frequency:
+                time.sleep(base_time + frequency - time.time())
+
 
     with open('config.yaml') as cfgfile:
         cfg = yaml.safe_load(cfgfile)
@@ -63,36 +98,10 @@ def main():
     # Delay execution, give vpn clients some time to reconnect after server reboot
     time.sleep(initial_delay)
 
-    # Start regular pinging
-    failure_reported = ''
-    went_offline = ''
-    while 1:
-        base_time = time.time()
-        if ping(host):
-            is_online = True
-            logger.debug('Server is online')
-            went_offline = ''
-            if failure_reported:
-                message = 'Соединение с роутером восстановлено'
-                send(message)
-                failure_reported = ''
-                logger.info('Server is online again!')
-        else:
-            is_online = False
-            if not went_offline:
-                logger.info('Server went offline!')
-                went_offline = time.time()
-            else:
-                logger.debug('Server is offline')
-
-        if went_offline and not failure_reported and time.time() > went_offline + report_delay:
-            message = f'{report_delay/60} минут назад пропало соединение с вашим роутером'
-            send(message)
-            logger.info('Failure reported to telegram recipients')
-            failure_reported = time.time()
-
-        if time.time() < base_time + frequency:
-            time.sleep(base_time + frequency - time.time())
+    # WRYYYYY
+    loop = asyncio.get_event_loop()
+    loop.create_task(pinger())
+    loop.run_forever()
 
 
 if __name__ == '__main__':
