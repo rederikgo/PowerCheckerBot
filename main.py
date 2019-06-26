@@ -57,7 +57,7 @@ def main():
                 failure_reported = time.time()
 
             if time.time() < base_time + frequency:
-                time.sleep(base_time + frequency - time.time())
+                await asyncio.sleep(base_time + frequency - time.time())
 
     async def telegram_watcher():
         await asyncio.sleep(5)
