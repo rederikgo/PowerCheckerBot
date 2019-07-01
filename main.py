@@ -10,7 +10,6 @@ import yaml
 from rest_wrappers import TeleRequester
 from pythonjsonlogger import jsonlogger
 
-
 def main():
     def ping(host):
         if platform.system().lower() == 'windows':
@@ -23,7 +22,7 @@ def main():
     def send(message, recipients):
         for recipient in recipients:
             telegram.send_message(recipient, message)
-            logger.debug(f'Message \'{message}\' sent to {recipient}')
+            logger.debug(f'Message \'{message}\' sent to {recipient}', extra={'type': 'Output'})
 
     async def pinger():
         failure_reported = ''
@@ -36,25 +35,25 @@ def main():
             base_time = time.time()
             if response:
                 is_online = True
-                logger.debug('Server is online')
+                logger.debug('Server is online', extra={'type': 'Status'})
                 went_offline = ''
                 if failure_reported:
                     message = 'Соединение с роутером восстановлено'
                     send(message, recipients)
                     failure_reported = ''
-                    logger.info('Server is online again!')
+                    logger.info('Server is online again!', extra={'type': 'Status'})
             else:
                 is_online = False
                 if not went_offline:
-                    logger.info('Server went offline!')
+                    logger.info('Server went offline!', extra={'type': 'Status'})
                     went_offline = time.time()
                 else:
-                    logger.debug('Server is offline')
+                    logger.debug('Server is offline', extra={'type': 'Status'})
 
             if went_offline and not failure_reported and time.time() > went_offline + report_delay:
                 message = f'{round(report_delay / 60)} минут назад пропало соединение с вашим роутером'
                 send(message, recipients)
-                logger.info('Failure reported to telegram recipients')
+                logger.info('Failure reported to telegram recipients', extra={'type': 'Output'})
                 failure_reported = time.time()
 
             if time.time() < base_time + frequency:
@@ -70,10 +69,11 @@ def main():
                 for item in response['result']:
                     user_id = item['message']['from']['id']
                     if user_id not in recipients:
-                        logger.info(f'New user request: {user_id}')
+                        logger.info(f'New user request: {user_id}', extra={'type': 'Input'})
                     else:
                         message_text = item['message']['text']
                         if message_text.lower() == 'статус':
+                            logger.debug(f'Status request from {user_id}', extra={'type': 'Input', 'user_id': user_id})
                             if is_online:
                                 message = 'Роутер работает'
                                 send(message, (user_id, ))
@@ -100,8 +100,7 @@ def main():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging_level)
     logger.addHandler(handler)
-    logger.info('')
-    logger.info('Session started')
+    logger.info('Session started', extra={'type': 'Startup'})
 
     # Init telegram connection
     token = cfg['telegram']['token']
@@ -111,9 +110,9 @@ def main():
     telegram = TeleRequester(token, proxies=proxy)
     try:
         if not telegram.self_test():
-            logger.error('Error setting up telegram connection')
+            logger.error('Error setting up telegram connection', extra={'type': 'Startup'})
     except:
-        logger.error('Error setting up telegram connection')
+        logger.error('Error setting up telegram connection', extra={'type': 'Startup'})
         quit()
 
     # Set pinger mode
