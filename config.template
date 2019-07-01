@@ -11,3 +11,6 @@ pinger:
     initial delay:
 debug:
     debug level: DEBUG
+    sentry dsn: ''
+    sentry appname: 'powerchecker'
+    sentry environment: ''

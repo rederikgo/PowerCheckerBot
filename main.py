@@ -5,10 +5,12 @@ import platform
 import subprocess
 import time
 
+from pythonjsonlogger import jsonlogger
+import sentry_sdk
 import yaml
 
 from rest_wrappers import TeleRequester
-from pythonjsonlogger import jsonlogger
+
 
 def main():
     def ping(host):
@@ -114,6 +116,12 @@ def main():
     except:
         logger.error('Error setting up telegram connection', extra={'type': 'Startup'})
         quit()
+
+    # Setup sentry.io reporting
+    sentry_dsn = cfg['debug']['sentry dsn']
+    sentry_app_name = cfg['debug']['sentry appname']
+    sentry_environment = cfg['debug']['sentry environment']
+    sentry_sdk.init(sentry_dsn, release=sentry_app_name, environment=sentry_environment)
 
     # Set pinger mode
     host = cfg['pinger']['ip']
