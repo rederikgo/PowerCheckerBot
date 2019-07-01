@@ -90,6 +90,12 @@ def main():
     with open('config.yaml') as cfgfile:
         cfg = yaml.safe_load(cfgfile)
 
+    # Setup sentry.io reporting
+    sentry_dsn = cfg['debug']['sentry dsn']
+    sentry_app_name = cfg['debug']['sentry appname']
+    sentry_environment = cfg['debug']['sentry environment']
+    sentry_sdk.init(sentry_dsn, release=sentry_app_name, environment=sentry_environment)
+
     # Setup logging
     logging_level = cfg['debug']['debug level']
     formatter = jsonlogger.JsonFormatter('%(asctime)s %(levelname)s: %(message)s')
@@ -116,12 +122,6 @@ def main():
     except:
         logger.error('Error setting up telegram connection', extra={'type': 'Startup'})
         quit()
-
-    # Setup sentry.io reporting
-    sentry_dsn = cfg['debug']['sentry dsn']
-    sentry_app_name = cfg['debug']['sentry appname']
-    sentry_environment = cfg['debug']['sentry environment']
-    sentry_sdk.init(sentry_dsn, release=sentry_app_name, environment=sentry_environment)
 
     # Set pinger mode
     host = cfg['pinger']['ip']
