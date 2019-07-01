@@ -8,6 +8,7 @@ import time
 import yaml
 
 from rest_wrappers import TeleRequester
+from pythonjsonlogger import jsonlogger
 
 
 def main():
@@ -89,7 +90,7 @@ def main():
 
     # Setup logging
     logging_level = cfg['debug']['debug level']
-    formatter = logging.Formatter('%(asctime)s: %(message)s')
+    formatter = jsonlogger.JsonFormatter('%(asctime)s %(levelname)s: %(message)s')
 
     handler = logging.handlers.RotatingFileHandler('powerchecker.log', mode='a', maxBytes=10485760, backupCount=0,
                                                    encoding='utf-8')
