@@ -89,7 +89,7 @@ def main():
                 if pinger.status != host_states[pinger.handle]:
                     if pinger.status == False:
                         if time.time() - pinger.last_status_change >= report_delay:
-                            send(f'{report_delay} минут назад пропало соединение с роутером \'{pinger.handle}\'', recipients)
+                            send(f'{report_delay/60} минут назад пропало соединение с роутером \'{pinger.handle}\'', recipients)
                             host_states[pinger.handle] = pinger.status
                     else:
                         send(f'Соединение с роутером \'{pinger.handle}\' восстановлено', recipients)
