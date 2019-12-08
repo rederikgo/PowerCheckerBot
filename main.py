@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import logging.handlers
 import platform
@@ -12,57 +13,67 @@ import yaml
 from rest_wrappers import TeleRequester
 
 
-def main():
-    def ping(host):
+class Pinger:
+    def __init__(self, ip, handle, frequency):
+        self.logger = logging.getLogger(__name__)
+        self.ip = ip
+        self.handle = handle
+        self.frequency = frequency
+        self.status = ''
+        self.last_status_change = ''
+
+    def ping(self, ip):
         if platform.system().lower() == 'windows':
             param = '-n'
         else:
             param = '-c'
-        command = ['ping', param, '1', host]
+        command = ['ping', param, '1', ip]
         return subprocess.call(command) == 0
 
+    async def run(self):
+        first_run = True
+        while True:
+            loop = asyncio.get_event_loop()
+            future = loop.run_in_executor(None, self.ping, self.ip)
+            response = await future
+            if response:
+                if self.status:
+                    self.logger.debug('Server is online', extra={'type': 'Status'})
+                elif not self.status and first_run:
+                    self.status = True
+                    self.logger.debug('Server is online', extra={'type': 'Status'})
+                elif not self.status and not first_run:
+                    self.status = True
+                    self.last_status_change = time.time()
+                    self.logger.debug('Server went online', extra={'type': 'Status'})
+            else:
+                if not self.status:
+                    self.logger.debug('Server is offline', extra={'type': 'Status'})
+                elif not self.status and first_run:
+                    self.status = False
+                    self.logger.debug('Server is offline', extra={'type': 'Status'})
+                elif self.status and not first_run:
+                    self.status = False
+                    self.last_status_change = time.time()
+                    self.logger.debug('Server went offline', extra={'type': 'Status'})
+            first_run = False
+            await asyncio.sleep(self.frequency)
+
+
+def main():
     def send(message, recipients):
+        if not isinstance(recipients, list):
+            recipients = [recipients, ]
         for recipient in recipients:
             telegram.send_message(recipient, message)
             logger.debug(f'Message \'{message}\' sent to {recipient}', extra={'type': 'Output'})
 
-    async def pinger():
-        failure_reported = ''
-        went_offline = ''
-        global is_online
-        while True:
-            loop = asyncio.get_event_loop()
-            future = loop.run_in_executor(None, ping, host)
-            response = await future
-            base_time = time.time()
-            if response:
-                is_online = True
-                logger.debug('Server is online', extra={'type': 'Status'})
-                went_offline = ''
-                if failure_reported:
-                    message = 'Соединение с роутером восстановлено'
-                    send(message, recipients)
-                    failure_reported = ''
-                    logger.info('Server is online again!', extra={'type': 'Status'})
-            else:
-                is_online = False
-                if not went_offline:
-                    logger.info('Server went offline!', extra={'type': 'Status'})
-                    went_offline = time.time()
-                else:
-                    logger.debug('Server is offline', extra={'type': 'Status'})
-
-            if went_offline and not failure_reported and time.time() > went_offline + report_delay:
-                message = f'{round(report_delay / 60)} минут назад пропало соединение с вашим роутером'
-                send(message, recipients)
-                logger.info('Failure reported to telegram recipients', extra={'type': 'Output'})
-                failure_reported = time.time()
-
-            if time.time() < base_time + frequency:
-                await asyncio.sleep(base_time + frequency - time.time())
-
-    async def telegram_watcher():
+    async def run_telegram_watcher():
         await asyncio.sleep(5)
+        host_states = {}
+        for pinger in pinger_stack:
+            host_states[pinger.handle] = pinger.status
+
         while True:
             loop = asyncio.get_event_loop()
             future = loop.run_in_executor(None, telegram.get_updates)
@@ -70,22 +81,40 @@ def main():
             if response:
                 for item in response['result']:
                     user_id = item['message']['from']['id']
-                    if user_id not in recipients:
-                        logger.info(f'New user request: {user_id}', extra={'type': 'Input'})
-                    else:
-                        message_text = item['message']['text']
-                        if message_text.lower() == 'статус':
-                            logger.debug(f'Status request from {user_id}', extra={'type': 'Input', 'user_id': user_id})
-                            if is_online:
-                                message = 'Роутер работает'
-                                send(message, (user_id, ))
-                            else:
-                                message = 'Роутер не работает'
-                                send(message, (user_id, ))
-
+                    message_text = item['message']['text']
+                    process_telegram_command(message_text, user_id)
                     telegram.clear_updates(item['update_id']+1)
 
+            for pinger in pinger_stack:
+                if pinger.status != host_states[pinger.handle]:
+                    if pinger.status == False:
+                        if time.time() - pinger.last_status_change >= report_delay:
+                            send(f'{report_delay} минут назад пропало соединение с роутером \'{pinger.handle}\'', recipients)
+                            host_states[pinger.handle] = pinger.status
+                    else:
+                        send(f'Соединение с роутером \'{pinger.handle}\' восстановлено', recipients)
+                        host_states[pinger.handle] = pinger.status
+
             await asyncio.sleep(poll_frequency)
+
+    def process_telegram_command(command, user_id):
+        if user_id not in recipients:
+            if command.lower() == f'регистрация {reg_pin}':
+                recipients.append(user_id)
+                logger.info(f'Temporary registration granted to user {user_id}', extra={'type': 'Input', 'user_id': user_id})
+                send('Временная регистрация завершена', user_id)
+                return
+            else:
+                return
+
+        if command.lower() == 'статус':
+            logger.debug(f'Status request from {user_id}', extra={'type': 'Input', 'user_id': user_id})
+            for pinger in pinger_stack:
+                if pinger.status:
+                    status = 'есть связь'
+                else:
+                    status = 'нет связи'
+                send(f'{pinger.handle}: {status}', user_id)
 
     with open('config.yaml') as cfgfile:
         cfg = yaml.safe_load(cfgfile)
@@ -114,6 +143,7 @@ def main():
     token = cfg['telegram']['token']
     proxy = {'https': cfg['telegram']['proxy']}
     recipients = cfg['telegram']['recipients']
+    reg_pin = cfg['telegram']['pin']
     poll_frequency = cfg['telegram']['poll frequency']
     telegram = TeleRequester(token, proxies=proxy)
     try:
@@ -124,18 +154,28 @@ def main():
         quit()
 
     # Set pinger mode
-    host = cfg['pinger']['ip']
-    frequency = cfg['pinger']['frequency']
+    ips = cfg['pinger']['ips']
+    handles = cfg['pinger']['handles']
+    locations = zip(ips, handles)
+    ping_frequency = cfg['pinger']['frequency']
     report_delay = cfg['pinger']['report failure delay']
     initial_delay = cfg['pinger']['initial delay']
 
     # Delay execution, give vpn clients some time to reconnect after server reboot
     time.sleep(initial_delay)
 
+    # Spawn a pinger for every ip
+    pinger_stack = []
+    for location in locations:
+        ip = location[0]
+        handle = location[1]
+        pinger_stack.append(Pinger(ip, handle, ping_frequency))
+
     # WRYYYYY
     loop = asyncio.get_event_loop()
-    loop.create_task(pinger())
-    loop.create_task(telegram_watcher())
+    for pinger in pinger_stack:
+        loop.create_task(pinger.run())
+    loop.create_task(run_telegram_watcher())
     loop.run_forever()
 
 

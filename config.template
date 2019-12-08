@@ -4,8 +4,12 @@ telegram:
     recipients:
         - 
 	poll frequency:
+	pin: ''
 pinger:
-    ip: ''
+    ips:
+        - ''
+    handles:
+        - ''
     frequency: 
     report failure delay:
     initial delay:
