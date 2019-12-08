@@ -1,5 +1,5 @@
 import asyncio
-import datetime
+import json
 import logging
 import logging.handlers
 import platform
@@ -38,24 +38,24 @@ class Pinger:
             response = await future
             if response:
                 if self.status:
-                    self.logger.debug('Server is online', extra={'type': 'Status'})
+                    self.logger.debug('Server is online', extra={'type': 'Status', 'ip': self.ip})
                 elif not self.status and first_run:
                     self.status = True
-                    self.logger.debug('Server is online', extra={'type': 'Status'})
+                    self.logger.debug('Server is online', extra={'type': 'Status', 'ip': self.ip})
                 elif not self.status and not first_run:
                     self.status = True
                     self.last_status_change = time.time()
-                    self.logger.debug('Server went online', extra={'type': 'Status'})
+                    self.logger.debug('Server went online', extra={'type': 'Status', 'ip': self.ip})
             else:
                 if not self.status:
-                    self.logger.debug('Server is offline', extra={'type': 'Status'})
+                    self.logger.debug('Server is offline', extra={'type': 'Status', 'ip': self.ip})
                 elif not self.status and first_run:
                     self.status = False
-                    self.logger.debug('Server is offline', extra={'type': 'Status'})
+                    self.logger.debug('Server is offline', extra={'type': 'Status', 'ip': self.ip})
                 elif self.status and not first_run:
                     self.status = False
                     self.last_status_change = time.time()
-                    self.logger.debug('Server went offline', extra={'type': 'Status'})
+                    self.logger.debug('Server went offline', extra={'type': 'Status', 'ip': self.ip})
             first_run = False
             await asyncio.sleep(self.frequency)
 
@@ -70,9 +70,13 @@ def main():
 
     async def run_telegram_watcher():
         await asyncio.sleep(5)
-        host_states = {}
-        for pinger in pinger_stack:
-            host_states[pinger.handle] = pinger.status
+        try:
+            with open('reported.txt') as inp:
+                host_states = json.loads(inp)[0]
+        except:
+            host_states = {}
+            for pinger in pinger_stack:
+                host_states[pinger.handle] = pinger.status
 
         while True:
             loop = asyncio.get_event_loop()
@@ -91,9 +95,11 @@ def main():
                         if time.time() - pinger.last_status_change >= report_delay:
                             send(f'{report_delay/60} минут назад пропало соединение с роутером \'{pinger.handle}\'', recipients)
                             host_states[pinger.handle] = pinger.status
+                            persist_reported_statuses(host_states)
                     else:
                         send(f'Соединение с роутером \'{pinger.handle}\' восстановлено', recipients)
                         host_states[pinger.handle] = pinger.status
+                        persist_reported_statuses(host_states)
 
             await asyncio.sleep(poll_frequency)
 
@@ -115,6 +121,11 @@ def main():
                 else:
                     status = 'нет связи'
                 send(f'{pinger.handle}: {status}', user_id)
+
+    def persist_reported_statuses(host_states):
+        export = json.dumps(host_states)
+        with open('reported.txt', 'w') as output:
+            output.write(export)
 
     with open('config.yaml') as cfgfile:
         cfg = yaml.safe_load(cfgfile)
