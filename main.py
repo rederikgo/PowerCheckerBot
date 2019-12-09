@@ -14,13 +14,13 @@ from rest_wrappers import TeleRequester
 
 
 class Pinger:
-    def __init__(self, ip, handle, frequency):
+    def __init__(self, ip, handle, frequency, persisted):
         self.logger = logging.getLogger(__name__)
         self.ip = ip
         self.handle = handle
         self.frequency = frequency
-        self.status = ''
-        self.last_status_change = ''
+        self.status = persisted[0]
+        self.last_status_change = persisted[1]
 
     def ping(self, ip):
         if platform.system().lower() == 'windows':
@@ -70,13 +70,9 @@ def main():
 
     async def run_telegram_watcher():
         await asyncio.sleep(5)
-        try:
-            with open('reported.txt') as inp:
-                host_states = json.loads(inp)[0]
-        except:
-            host_states = {}
-            for pinger in pinger_stack:
-                host_states[pinger.handle] = pinger.status
+        host_states = {}
+        for pinger in pinger_stack:
+            host_states[pinger.handle] = persisted_statuses[pinger.handle][0]
 
         while True:
             loop = asyncio.get_event_loop()
@@ -91,7 +87,7 @@ def main():
 
             for pinger in pinger_stack:
                 if pinger.status != host_states[pinger.handle]:
-                    if pinger.status == False:
+                    if pinger.status is False:
                         if time.time() - pinger.last_status_change >= report_delay:
                             send(f'{report_delay/60} минут назад пропало соединение с роутером \'{pinger.handle}\'', recipients)
                             host_states[pinger.handle] = pinger.status
@@ -124,7 +120,7 @@ def main():
 
     def persist_reported_statuses(host_states):
         export = json.dumps(host_states)
-        with open('reported.txt', 'w') as output:
+        with open(persist_file, 'w') as output:
             output.write(export)
 
     with open('config.yaml') as cfgfile:
@@ -171,6 +167,16 @@ def main():
     ping_frequency = cfg['pinger']['frequency']
     report_delay = cfg['pinger']['report failure delay']
     initial_delay = cfg['pinger']['initial delay']
+    persist_file = 'reported.json'
+
+    # Load persisted report statuses from the last session
+    try:
+        with open(persist_file) as inp:
+            persisted_statuses = json.loads(inp)[0]
+    except:
+        persisted_statuses = {}
+        for handle in handles:
+            persisted_statuses[handle] = [True, '']
 
     # Delay execution, give vpn clients some time to reconnect after server reboot
     time.sleep(initial_delay)
@@ -180,7 +186,7 @@ def main():
     for location in locations:
         ip = location[0]
         handle = location[1]
-        pinger_stack.append(Pinger(ip, handle, ping_frequency))
+        pinger_stack.append(Pinger(ip, handle, ping_frequency, persisted_statuses[handle]))
 
     # WRYYYYY
     loop = asyncio.get_event_loop()

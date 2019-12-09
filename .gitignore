@@ -5,6 +5,7 @@ venv/
 *.log
 *.txt
 *.yaml
+*.json
 
 # Allow
 !requirements.txt
